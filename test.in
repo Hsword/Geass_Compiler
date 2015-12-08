@@ -1,0 +1,17 @@
+{
+    const int a=10;
+    int aa[3]={1,2},b=10;
+    if(a>1)
+      b=a+aa[1];
+    else
+       aa[1]=6;
+    for(b=2;b<=8;b=b+1)
+    ;
+    while(b<=18)
+    {
+       aa[2]=aa[2]+1;
+       b=b+5;
+    }
+}
+
+
