@@ -1,6 +1,9 @@
 {
     const int a=10;
-    int aa[3]={1,2},b=10;
+    int aa[3],b=10;
+    const int c=1;
+    real x,y[2];
+    int z;
     if(a>1)
       b=a+aa[1];
     else

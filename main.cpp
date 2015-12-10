@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <vector>
 #include <cmath>
+#include <cstdlib>
+#include <stack>
 using namespace std;
 enum Tag
 {
@@ -135,7 +137,8 @@ bool issymbol(char c)
     }
     return false;
 }
-bool error=false;
+bool lexical_error=false;
+string error_message="";
 string buffer="";
 string tmp="";
 vector<Token*> Token_List;
@@ -166,6 +169,148 @@ void show_Token_List()
 }
 
 /* 递归子程序语法分析*/
+bool synax_error=false;
+bool semantic_error=false;
+void Semantic_Error(string msg);
+
+//const 声明变量必须跟立即数
+struct Synb
+{
+    int tid;//token_index
+    int typ;
+    /*
+    i r c a
+    1 2 3 4
+    */
+    int cat;
+    /*
+    c v
+    1 2
+    */
+    int addr;
+    Synb(int tid)
+    {
+        this->tid=tid;
+        this->typ=this->cat=this->addr=0;
+    }
+};
+int Data_Size(int typ)
+{
+    if(typ==1) return 4;
+    else if(typ==2) return 8;
+    else if(typ==3) return 1;
+}
+vector<Synb> Synbl;
+vector<double> Consl;
+int Vall=0;
+struct Typeu
+{
+    int typ;
+    vector<int> Tlen;
+    /*eg:
+    itp
+    len1
+    len2
+    ...
+    */
+    Typeu(int typ)
+    {
+        this->typ=typ;
+    }
+};
+vector<Typeu> Typel;
+struct Declar_Unit
+{
+    int tid;
+    vector<int> Array_Len_List;
+    Declar_Unit(int tid)
+    {
+        this->tid=tid;
+    }
+    void Declar_Unit_Push(int len)
+    {
+        this->Array_Len_List.push_back(len);
+    }
+};
+void Synbl_Push_Name(int tid)
+{
+    for(int i=0;i<Synbl.size();i++)
+    {
+        if(Token_List[Synbl[i].tid]->get_lexeme_str()==Token_List[tid]->get_lexeme_str())
+            return;
+    }
+    Synbl.push_back(Synb(tid));
+    return ;
+}
+void Synbl_Push(Declar_Unit du,int typ,bool cat,bool arr,double val)   //typ:Type_Op   cat:Const_Type_Op   arr:Array_Op
+{
+    int tid=du.tid;
+    for(int i=0;i<Synbl.size();i++)
+    {
+        if(Token_List[Synbl[i].tid]->get_lexeme_str()==Token_List[tid]->get_lexeme_str())
+        {
+            if(Synbl[i].typ!=0)
+            {
+                Semantic_Error("redeclation confict!");
+            }
+            else
+            {
+                if(arr)
+                {
+                    Synbl[i].cat=2;
+                    Synbl[i].typ=Typel.size();
+                    Typel.push_back(Typeu(4));
+                    Typel[Synbl[i].typ].Tlen.push_back(typ);
+                    int sum=1;
+                    for(int k=0;k<du.Array_Len_List.size();k++)
+                    {
+                        sum*=du.Array_Len_List[k];
+                        Typel[Synbl[i].typ].Tlen.push_back(du.Array_Len_List[k]);
+                    }
+                    Synbl[i].addr=Vall;
+                    Vall+=sum*Data_Size(typ);
+                }
+                else
+                {
+                    Synbl[i].typ=typ;
+                    if(cat)
+                    {
+                        Synbl[i].cat=1;
+                        Synbl[i].addr=Consl.size();
+                        Consl.push_back(val);
+                    }
+                    else
+                    {
+                        Synbl[i].cat=2;
+                        Synbl[i].addr=Vall;
+                        Vall+=Data_Size(typ);
+                    }
+                }
+            }
+        }
+    }
+}
+bool Const_Type_Op=false;
+int Type_Op;
+bool Array_Op=false;
+
+void Show_Synbl()
+{
+    cout<<"name\ttyp\tcat\taddr\n";
+    for(int i=0;i<Synbl.size();i++)
+    {
+        cout<<Token_List[Synbl[i].tid]->get_lexeme_str();
+        cout<<"\t"<<Synbl[i].typ<<"\t"<<Synbl[i].cat<<"\t"<<Synbl[i].addr<<"\n";
+    }
+}
+
+void Semantic_Error(string msg)
+{
+    semantic_error=true;
+    error_message=msg;
+    cout<<error_message<<endl;
+    exit(0);
+}
 //by 何雪
 int Token_List_Index;
 void Conditional_Expression();
@@ -182,18 +327,19 @@ void Multiplicative_Expression();
 void Unary_Expression();
 void Primary_Expression();
 void Assignment_Expression();
+//
+double Constant();
+double Real_Constant();
+int Integer_Constant();
 //by 王千阁
 int TokenList_Index;
-void Constant();
 void Assignment_Operator();
 void Unary_Operator();
 void Type_Name();
 void Type_Specifier();
-void Declarator();
-void Declarator_End();
+Declar_Unit Declarator();
 void Declaration();
 void Init_Declarator();
-void Init_Declarator_End();
 void Initializer();
 void Initializer_List();
 void Initializer_End();
@@ -203,12 +349,15 @@ void Expression_Statement();
 void Selection_Statement();
 void Iteration_Statement();
 void Jump_Statement();
-//
- void Identifier()
+
+
+
+int Identifier()
  {
     if(Token_List[Token_List_Index]->get_tag()!=ID)
-        error=true;
+        synax_error=true;
     Token_List_Index++;
+    return Token_List_Index-1;
  }
 
 
@@ -230,7 +379,7 @@ void Conditional_Expression()
             Conditional_Expression();
         }
         else
-            error=true;
+            synax_error=true;
     }
 }
 
@@ -328,16 +477,14 @@ void Unary_Expression()
         if(Token_List[Token_List_Index]->get_tag()==')')
             Token_List_Index++;
         else
-            error=true;
+            synax_error=true;
     }
     else if(Token_List[Token_List_Index]->get_tag()==ID)
     {
         Primary_Expression();
     }
-    else if(Token_List[Token_List_Index]->get_tag()==NUM || Token_List[Token_List_Index]->get_tag()==REAL)
-        Token_List_Index++;
     else
-        error=true;
+        Constant();
 }
 
 void Primary_Expression()
@@ -351,11 +498,31 @@ void Primary_Expression()
             Constant_Expression();
             if(Token_List[Token_List_Index]->get_tag()==']')
                 Token_List_Index++;
-            else error=true;
+            else synax_error=true;
         }
     }
 }
-
+double Constant()
+{
+    if(Token_List[Token_List_Index]->get_tag()==NUM )
+        return Integer_Constant();
+    else
+        return Real_Constant();
+}
+int Integer_Constant()
+{
+    if(Token_List[Token_List_Index]->get_tag()!=NUM)
+        synax_error=true;
+    Token_List_Index++;
+    return Token_List[Token_List_Index-1]->get_numvalue();
+}
+double Real_Constant()
+{
+    if(Token_List[Token_List_Index]->get_tag()!=REAL)
+        synax_error=true;
+    Token_List_Index++;
+    return Token_List[Token_List_Index-1]->get_realvalue();
+}
 
 void Assignment_Expression()
 {
@@ -369,18 +536,6 @@ void Assignment_Expression()
 
 
 
-void Constant()
-{
-     if (Token_List[Token_List_Index]->get_tag()==NUM)
-        {
-         Token_List_Index++;
-        }
-        if (Token_List[Token_List_Index]->get_tag()==REAL)
-        {
-         Token_List_Index++;
-        }
-
-}
 void Expression()
 {
     Assignment_Expression();
@@ -396,7 +551,7 @@ void Assignment_Operator()
         Token_List_Index++;
      else
      {
-        error=true;
+        synax_error=true;
      }
 }
 void Unary_Operator()
@@ -409,14 +564,14 @@ void Unary_Operator()
         Token_List_Index++;
     else
     {
-       error=true;
-
+       synax_error=true;
     }
 }
 void Type_Name()
 {
      if (Token_List[Token_List_Index]->get_tag()==TYPE&&Token_List[Token_List_Index]->get_lexeme_str()=="const")
      {
+         Const_Type_Op=true;
          Token_List_Index++;
          Type_Specifier();
      }
@@ -427,52 +582,46 @@ void Type_Name()
 }
 void Type_Specifier()
 {
-     if (Token_List[Token_List_Index]->get_lexeme_str()=="int")
-     Token_List_Index++;
-        else if (Token_List[Token_List_Index]->get_lexeme_str()=="char")
-          Token_List_Index++;
-         else if (Token_List[Token_List_Index]->get_lexeme_str()=="real")
-            Token_List_Index++;
-          else
-            {
-                error=true;
-
-            }
-}
-void Declarator()
-{
-    if (Token_List[Token_List_Index]->get_tag()=='(')
+    if (Token_List[Token_List_Index]->get_lexeme_str()=="int")
     {
         Token_List_Index++;
-        Declarator();
-        if (Token_List[Token_List_Index]->get_tag()==')')
-            Token_List_Index++;
-        else{
-                error=true;
-
-            }
+        Type_Op=1;
     }
+    else if (Token_List[Token_List_Index]->get_lexeme_str()=="real")
+    {
+        Token_List_Index++;
+        Type_Op=2;
+     }
+     else if (Token_List[Token_List_Index]->get_lexeme_str()=="char")
+     {
+            Token_List_Index++;
+            Type_Op=3;
+     }
     else
     {
-        Identifier();
-        Declarator_End();
+            synax_error=true;
     }
 }
-void Declarator_End()
+Declar_Unit Declarator()
 {
-   while (Token_List[Token_List_Index]->get_tag()=='[')
-   {
+    Declar_Unit du(Identifier());
+    if(Const_Type_Op&&Token_List[Token_List_Index]->get_tag()=='[')
+    {
+        Semantic_Error("const array is not allowed!");
+    }
+    while (Token_List[Token_List_Index]->get_tag()=='[')
+    {
        Token_List_Index++;
-       Constant_Expression();
+       Array_Op=true;
+       du.Declar_Unit_Push(Integer_Constant());
        if (Token_List[Token_List_Index]->get_tag()==']')
             Token_List_Index++;
        else
        {
-            error=true;
-
+            synax_error=true;
        }
-
    }
+   return du;
 }
 void Declaration()
 {
@@ -483,23 +632,36 @@ void Declaration()
         Token_List_Index++;
         Init_Declarator();
     }
+    Const_Type_Op=false;
     if(Token_List[Token_List_Index]->get_tag()!=';')
-        error=true;
+        synax_error=true;
     else
         Token_List_Index++;
 }
 void Init_Declarator()
 {
-    Declarator();
-    Init_Declarator_End();
-}
-void Init_Declarator_End()
-{
+    Declar_Unit du=Declarator();
+    if(Const_Type_Op&&Token_List[Token_List_Index]->get_tag()!='=')
+    {
+        Semantic_Error("const init-declarator needs initializer.");
+    }
+    if(Array_Op&&Token_List[Token_List_Index]->get_tag()=='=')
+    {
+        Semantic_Error("array init-declarator has no initializer.");
+    }
+    double val;
     if (Token_List[Token_List_Index]->get_tag()=='=')
     {
         Token_List_Index++;
-        Initializer();
+        if(Const_Type_Op)
+        {
+            val=Constant();
+        }
+        else
+            Initializer();
     }
+    Synbl_Push(du,Type_Op,Const_Type_Op,Array_Op,val);   //typ:Type_Op   cat:Const_Type_Op   arr:Array_Op
+    Array_Op=false;
 }
 void Initializer()
 {
@@ -528,13 +690,13 @@ void Initializer_End()
         if (Token_List[Token_List_Index]->get_tag()=='}')
             Token_List_Index++;
         else
-            error=true;
+            synax_error=true;
     }
     else if (Token_List[Token_List_Index]->get_tag()=='}')
     {
         Token_List_Index++;
     }else
-   error=true;
+   synax_error=true;
 
 
 }
@@ -576,16 +738,16 @@ void Selection_Statement()
     if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="if")
         Token_List_Index++;
     else
-       error=true;
+       synax_error=true;
     if (Token_List[Token_List_Index]->get_tag()=='(')
         Token_List_Index++;
     else
-       error=true;
+       synax_error=true;
     Constant_Expression();
     if (Token_List[Token_List_Index]->get_tag()==')')
         Token_List_Index++;
     else
-       error=true;
+       synax_error=true;
     Statement();
     if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="else")
     {
@@ -604,11 +766,11 @@ void Iteration_Statement()
         }
         else
         {
-            error=true;
+            synax_error=true;
         }
         Constant_Expression();
         if (Token_List[Token_List_Index]->get_tag()!=')')
-            error=true;
+            synax_error=true;
         Token_List_Index++;
         Statement();
     }
@@ -618,25 +780,25 @@ void Iteration_Statement()
         if (Token_List[Token_List_Index]->get_tag()=='(')
             Token_List_Index++;
         else
-            error=true;
+            synax_error=true;
         if (Token_List[Token_List_Index]->get_tag()!=';')
             Expression();
         if (Token_List[Token_List_Index]->get_tag()==';')
             Token_List_Index++;
         else
-            error=true;
+            synax_error=true;
         if (Token_List[Token_List_Index]->get_tag()!=';')
             Constant_Expression();
         if (Token_List[Token_List_Index]->get_tag()==';')
             Token_List_Index++;
         else
-            error=true;
+            synax_error=true;
         if (Token_List[Token_List_Index]->get_tag()!=')')
             Expression();
         if (Token_List[Token_List_Index]->get_tag()==')')
             Token_List_Index++;
         else
-           error=true;
+           synax_error=true;
         Statement();
     }
 }
@@ -671,7 +833,7 @@ int main()
     cout<<buffer<<endl;
     int buffer_size=buffer.length();
     int lexemeBegin=0,forword=0;
-    while(lexemeBegin<buffer_size&&!error)
+    while(lexemeBegin<buffer_size&&!lexical_error)
     {
         char c=buffer[forword];
         //cout<<"c=="<<c<<endl;
@@ -731,7 +893,10 @@ int main()
                 index=get_typeindex(tmp);
                 if(index!=-1)   Token_List.push_back(new Word(TYPE,index));
                 else
+                {
                     Token_List.push_back(new Word(ID,get_idindex(tmp)));
+                    Synbl_Push_Name(Token_List.size()-1);
+                }
             }
             lexemeBegin=forword;
         }
@@ -765,7 +930,7 @@ int main()
                 {
                     forword++;
                     if(forword>=buffer_size||!isdigit(buffer[forword]))
-                        error=true;
+                        lexical_error=true;
                     else
                     {
                         double w=10;
@@ -797,7 +962,7 @@ int main()
                                 forword++;
                                 if(forword>=buffer_size)
                                 {
-                                    error=true;
+                                    lexical_error=true;
                                 }
                                 else
                                 {
@@ -808,7 +973,7 @@ int main()
                                         if(c=='-')  ispos=false;
                                         forword++;
                                         if(forword>=buffer_size||!isdigit(buffer[forword]))
-                                            error=true;
+                                            lexical_error=true;
                                         else
                                         {
                                             c=buffer[forword];
@@ -817,13 +982,13 @@ int main()
                                     }
                                     else if(!isdigit(c))
                                     {
-                                        error=true;
+                                        lexical_error=true;
                                     }
                                     else
                                     {
                                         ord=c-'0';
                                     }
-                                    if(!error)
+                                    if(!lexical_error)
                                     {
                                         while(true)
                                         {
@@ -854,7 +1019,7 @@ int main()
                     forword++;
                     if(forword>=buffer_size)
                     {
-                        error=true;
+                        lexical_error=true;
                     }
                     else
                     {
@@ -865,7 +1030,7 @@ int main()
                             if(c=='-')  ispos=false;
                             forword++;
                             if(forword>=buffer_size||!isdigit(buffer[forword]))
-                                error=true;
+                                lexical_error=true;
                             else
                             {
                                 c=buffer[forword];
@@ -874,13 +1039,13 @@ int main()
                         }
                         else if(!isdigit(c))
                         {
-                            error=true;
+                            lexical_error=true;
                         }
                         else
                         {
                             ord=c-'0';
                         }
-                        if(!error)
+                        if(!lexical_error)
                         {
                             while(true)
                             {
@@ -908,7 +1073,7 @@ int main()
         {
             if((forword+2>=buffer_size)||(buffer[forword+2]!='\''))
             {
-                error=true;
+                lexical_error=true;
             }
             else
             {
@@ -924,12 +1089,12 @@ int main()
                 forword++;
                 if(forword>=buffer_size)
                 {
-                    error=true;
+                    lexical_error=true;
                     break;
                 }
                 c=buffer[forword];
             }while(buffer[forword]!='"');
-            if(!error)
+            if(!lexical_error)
             {
                 Token_List.push_back(new Word(STR,get_strindex(buffer.substr(lexemeBegin+1,forword-lexemeBegin-1))));
                 forword++;
@@ -943,9 +1108,10 @@ int main()
             lexemeBegin++;
         }
     }
-    if(error)
+    if(lexical_error)
     {
-        cout<<"Lexical analysis error!"<<endl;
+        error_message="Lexical analysis error!";
+        cout<<error_message<<endl;
     }
     else
     {
@@ -953,15 +1119,21 @@ int main()
         cout<<"Lexical analysis accepted!"<<endl;
 
         //语法分析开始
+        error_message="Synax analysis error!";
         Token_List_Index=0;
+        /* Init
+        */
+        for(int i=0;i<=3;i++)
+            Typel.push_back(Typeu(i));
         Compound_Statement();
-        if(error)
+        if(synax_error)
         {
-            cout<<"Synax analysis error!"<<endl;
+            cout<<error_message<<endl;
         }
         else
         {
-            cout<<"Synax analysis accepted!"<<endl;
+            cout<<"Synax analysis and Semantic analysis accepted!"<<endl;
+            Show_Synbl();
         }
     }
     return 0;
