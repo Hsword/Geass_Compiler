@@ -8,7 +8,7 @@
 using namespace std;
 enum Tag
 {
-    NUM=256,REAL,ID,MINUS,AND,OR,EQ,NE,GE,LE,STR,TYPE,KEY
+    NUM=256,REAL,ID,AND,OR,EQ,NE,GE,LE,STR,TYPE,KEY
 };
 const int k_w_len=8;
 const int t_w_len=5;
@@ -127,7 +127,7 @@ bool isdigit(char c)
         return true;
     else return false;
 }
-string symbols=",;+-*/(){}[]";
+string symbols=",;+-*/(){}[]^?:!~";
 bool issymbol(char c)
 {
     for(int i=0;i<symbols.length();i++)
@@ -165,6 +165,7 @@ void show_Token_List()
             {
                 cout<<Token_List[i]->get_lexeme_str()<<endl;
             }
+            else cout<<endl;
     }
 }
 
@@ -1106,6 +1107,36 @@ int main()
             Token_List.push_back(new Token(c));
             forword++;
             lexemeBegin++;
+        }
+        else if(c=='&')
+        {
+            if((forword+1>=buffer_size)||(buffer[forword+1]!='&'))
+            {
+                Token_List.push_back(new Token(c));
+                forword++;
+                lexemeBegin++;
+            }
+            else
+            {
+                Token_List.push_back(new Token(AND));
+                forword+=2;
+                lexemeBegin+=2;
+            }
+        }
+        else if(c=='|')
+        {
+            if((forword+1>=buffer_size)||(buffer[forword+1]!='|'))
+            {
+                Token_List.push_back(new Token(c));
+                forword++;
+                lexemeBegin++;
+            }
+            else
+            {
+                Token_List.push_back(new Token(OR));
+                forword+=2;
+                lexemeBegin+=2;
+            }
         }
     }
     if(lexical_error)
