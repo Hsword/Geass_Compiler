@@ -49,7 +49,6 @@
                    | real
 
 <declarator>  ::= <identifier>  { [ {<constant-expression>}? ] }*
-                | ( <declarator> )
 
 <declaration> ::=  <type-name> <init-declarator> { <init-declarator> }*
 
@@ -68,19 +67,28 @@
 <compound-statement> ::= { {<declaration>}* {<statement>}* }
 
 <statement> ::=<expression-statement>
-              | <compound-statement>
+              | <area-statement>
               | <selection-statement>
               | <iteration-statement>
-              | return {<constant-expression>}? ;
+
+<area-statement> ::= { { <statement> }* }
 
 <expression-statement> ::= {<expression>}? ;
 
-<selection-statement> ::= if ( <constant-expression> ) <statement>
-                        | if ( <constant-expression> ) <statement> else <statement>
+<selection-statement> ::= if ( <constant-expression> ) <area-statement>
+                        | if ( <constant-expression> ) <statement> else <area-statement>
 
-<iteration-statement> ::= while ( <constant-expression> ) <statement>
-               | for ( {<expression>}? ; {<constant-expression>}? ; {<expression>}? ) <statement>
+<iteration-statement> ::= while ( <constant-expression> ) <area-jump-statement>
+               | for ( {<expression>}? ; {<constant-expression>}? ; {<expression>}? ) <area-jump-statement>
 
 <jump-statement> ::= continue ;
-                   | break ;
-                   | <statement>
+                  | break ;
+                  | <expression-statement>
+                  | <area-jump-statement>
+                  | <selection-jump-statement>
+                  | <iteration-statement>
+
+<area-jump-statement> ::= { { <jump-statement }* }
+
+<selection-statement> ::= if ( <constant-expression> ) <area-jump-statement>
+                        | if ( <constant-expression> ) <statement> else <area-jump-statement>

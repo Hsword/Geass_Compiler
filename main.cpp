@@ -8,8 +8,14 @@
 using namespace std;
 enum Tag
 {
-    NUM=256,REAL,ID,AND,OR,EQ,NE,GE,LE,STR,TYPE,KEY
+    NUM=256,REAL,ID,AND,OR,EQ,NE,GE,LE,STR,TYPE,KEY,THEN,ELSE,IFEND,WHILE,DO,WHEND,FOR,FOR_CHECK,FOR_DO,FOR_JUMP,FOR_END,CONTINUE,BREAK,
 };
+string Tag_Str[]={
+    "NUM","REAL","ID","AND","OR","EQ","NE","GE","LE","STR","TYPE","KEY","THEN","ELSE","IFEND","WHILE","DO","WHEND","FOR","FOR_CHECK","FOR_DO","FOR_JUMP","FOR_END","CONTINUE","BREAK"
+};
+#define NUM_SIZE 4
+#define REAL_SIZE 8
+#define CHAR_SIZE 1
 const int k_w_len=8;
 const int t_w_len=5;
 string keywords[k_w_len]={"if","else","for","while","do","break","continue","return"};
@@ -197,9 +203,10 @@ struct Synb
 };
 int Data_Size(int typ)
 {
-    if(typ==1) return 4;
-    else if(typ==2) return 8;
-    else if(typ==3) return 1;
+    if(typ==1) return NUM_SIZE;
+    else if(typ==2) return REAL_SIZE;
+    else if(typ==3) return CHAR_SIZE;
+    else return 0;
 }
 vector<Synb> Synbl;
 vector<double> Consl;
@@ -297,6 +304,7 @@ bool Array_Op=false;
 
 void Show_Synbl()
 {
+    cout<<"Synbl:"<<endl;
     cout<<"name\ttyp\tcat\taddr\n";
     for(int i=0;i<Synbl.size();i++)
     {
@@ -312,6 +320,357 @@ void Semantic_Error(string msg)
     cout<<error_message<<endl;
     exit(0);
 }
+
+//四元式结构定义
+struct Node{
+    int Ein;   // 0: empty  1:identifier 2:num
+    int Addr;
+    int Size;
+    double Num;
+};
+Node Tid_To_Node();
+struct Middle_Code_Unit{
+    int Operator;//
+    Node Target1;//为零表示空
+    Node Target2;//为零表示为空
+    Node Result;//为零表示为空，为-1表示此处为跳转地址
+};
+vector<Middle_Code_Unit> Middle_Code;
+void Show_Middle_Code()
+{
+    cout<<"Middle Code List:"<<endl;
+    for(int i=0;i<Middle_Code.size();i++)
+    {
+        if(Middle_Code[i].Operator<256)
+        {
+            printf("%c",Middle_Code[i].Operator);
+        }
+        else
+        {
+            cout<<Tag_Str[Middle_Code[i].Operator-256];
+        }
+        cout<<"\t";
+        //if(Middle_Code[i]->)
+        cout<<endl;
+    }
+}
+vector< vector< Middle_Code_Unit> > Block;
+//翻译文法
+stack<Node> Sem;
+stack<int> Syn;
+//动作函数声明
+void init();
+void Pop_Sem();
+void Pop_Syn();
+void Push_Sem(int tid);
+void Push_Syn(int op);
+void Quat();
+void Unary_Quat();
+void Assign();
+//if else
+void Genth();
+void Genel();
+void Genie();
+//while
+void Genwh();
+void Gendo();
+void Genwe();
+//for
+void Genfr();
+void Genfc();
+void Genfd();
+void Genfj();
+void Genfe();
+
+void Continue();
+void Break();
+
+
+
+Node Tid_To_Node(int tid)
+{
+    Node node;
+    if(Token_List[tid]->get_tag()==NUM)
+    {
+        node.Ein=2;
+        node.Num=Token_List[tid]->get_numvalue();
+        node.Size=NUM_SIZE;
+    }
+    else if(Token_List[tid]->get_tag()==REAL)
+    {
+        node.Ein=2;
+        node.Num=Token_List[tid]->get_realvalue();
+        node.Size=REAL_SIZE;
+    }
+    else if(Token_List[tid]->get_tag()==ID)
+    {
+        for(int i=0;i<Synbl.size();i++)
+        {
+            if(Token_List[tid]->get_lexeme_str()==Token_List[Synbl[i].tid]->get_lexeme_str())
+            {
+                if(Synbl[i].typ==4)
+                {
+                    ///数组！！！！
+                }
+                else
+                {
+                    node.Size=Data_Size(Synbl[i].typ);
+                    if(Synbl[i].cat==1)
+                    {
+                        node.Ein=2;
+                        node.Num=Consl[Synbl[i].addr];
+                    }
+                    else
+                    {
+                        node.Ein=1;
+                        node.Addr=Synbl[i].addr;
+                    }
+                }
+                break;
+            }
+        }
+    }
+    return node;
+}
+void init()
+{
+    while(!Sem.empty())
+        Pop_Sem();
+    while(!Syn.empty())
+        Syn.pop();
+}
+void Pop_Sem()
+{
+    cout<<"pop sem"<<endl;
+    Sem.pop();
+}
+void Pop_Syn()
+{
+    cout<<"pop syn"<<endl;
+    Syn.pop();
+}
+void Push_Sem(int tid)
+{
+    cout<<"push sem"<<endl;
+    Sem.push(Tid_To_Node(tid));
+}
+void Push_Syn(int op)
+{
+    cout<<"push syn"<<endl;
+    Syn.push(op);
+}
+void Quat()
+{
+    Middle_Code_Unit T;
+    T.Operator=Syn.top();
+    Pop_Syn();
+    T.Target2=Sem.top();
+    Pop_Sem();
+    T.Target1=Sem.top();
+    Pop_Sem();
+    T.Result=Node();
+    T.Result.Addr=Vall;
+    T.Result.Size=max(T.Target1.Size,T.Target2.Size);
+    Vall+=T.Result.Size;
+    T.Result.Ein=1;
+    Sem.push(T.Result);
+    Middle_Code.push_back(T);
+}
+void Unary_Quat()
+{
+    Middle_Code_Unit T;
+    T.Operator=Syn.top();
+    Pop_Syn();
+    T.Target1=Sem.top();
+    Pop_Sem();
+    T.Result=Sem.top();
+    Pop_Sem();
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Assign()
+{
+    Middle_Code_Unit T;
+    T.Operator=Syn.top();
+    Pop_Syn();
+    T.Target1=Sem.top();
+    Pop_Sem();
+    T.Result=Sem.top();
+    Pop_Sem();
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    if(T.Result.Size<T.Target1.Size)
+    {
+        //Show_Synbl();
+        //cout<<T.Result.Size<<T.Target1.Size<<endl;
+        Semantic_Error("Type mismatch in assign expression!");
+    }
+    Middle_Code.push_back(T);
+}
+//if else
+void Genth()
+{
+    Middle_Code_Unit T;
+    T.Operator=THEN;
+    T.Target1=Sem.top();
+    Pop_Sem();
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Genel()
+{
+    Middle_Code_Unit T;
+    T.Operator=ELSE;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Genie()
+{
+    Middle_Code_Unit T;
+    T.Operator=IFEND;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+//while
+void Genwh()
+{
+    Middle_Code_Unit T;
+    T.Operator=WHILE;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Gendo()
+{
+    Middle_Code_Unit T;
+    T.Operator=DO;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Genwe()
+{
+    Middle_Code_Unit T;
+    T.Operator=WHEND;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+//for
+void Genfr()
+{
+    Middle_Code_Unit T;
+    T.Operator=FOR;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Genfc()
+{
+    Middle_Code_Unit T;
+    T.Operator=FOR_CHECK;
+    T.Target1=Sem.top();
+    Pop_Sem();
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Genfd()
+{
+    Middle_Code_Unit T;
+    T.Operator=FOR_DO;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Genfj()
+{
+    Middle_Code_Unit T;
+    T.Operator=FOR_JUMP;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Genfe()
+{
+    Middle_Code_Unit T;
+    T.Operator=FOR_END;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+
+void Continue()
+{
+    Middle_Code_Unit T;
+    T.Operator=CONTINUE;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+void Break()
+{
+    Middle_Code_Unit T;
+    T.Operator=BREAK;
+    T.Target1=Node();
+    T.Target1.Ein=0;
+    T.Target2=Node();
+    T.Target2.Ein=0;
+    T.Result=Node();
+    T.Result.Ein=0;
+    Middle_Code.push_back(T);
+}
+
+
+
 //by 何雪
 int Token_List_Index;
 void Conditional_Expression();
@@ -373,11 +732,14 @@ void Conditional_Expression()
     while(Token_List[Token_List_Index]->get_tag()=='?')
     {
         Token_List_Index++;
+        Genth();
         Expression();
         if(Token_List[Token_List_Index]->get_tag()==':')
         {
             Token_List_Index++;
+            Genel();
             Conditional_Expression();
+            Genie();
         }
         else
             synax_error=true;
@@ -389,8 +751,10 @@ void Logical_Or_Expression()
     Logical_And_Expression();
     while(Token_List[Token_List_Index]->get_tag()==OR)
     {
+        Push_Syn(OR);
         Token_List_Index++;
         Logical_And_Expression();
+        Quat();
     }
 }
 
@@ -399,8 +763,10 @@ void Logical_And_Expression()
     Inclusive_Or_Expression();
     while(Token_List[Token_List_Index]->get_tag()==AND)
     {
+        Push_Syn(AND);
         Token_List_Index++;
         Inclusive_Or_Expression();
+        Quat();
     }
 }
 
@@ -409,8 +775,10 @@ void Inclusive_Or_Expression()
     And_Expression();
     while(Token_List[Token_List_Index]->get_tag()=='^')
     {
+        Push_Syn('^');
         Token_List_Index++;
         And_Expression();
+        Quat();
     }
 }
 
@@ -419,8 +787,10 @@ void And_Expression()
     Equality_Expression();
     while(Token_List[Token_List_Index]->get_tag()=='&')
     {
+        Push_Syn('&');
         Token_List_Index++;
         Equality_Expression();
+        Quat();
     }
 }
 
@@ -429,8 +799,10 @@ void Equality_Expression()
     Relational_Expression();
     while(Token_List[Token_List_Index]->get_tag()==EQ || Token_List[Token_List_Index]->get_tag()==NE)
     {
+        Push_Syn(Token_List[Token_List_Index]->get_tag());
         Token_List_Index++;
         Relational_Expression();
+        Quat();
     }
 }
 
@@ -439,8 +811,10 @@ void Relational_Expression()
     Additive_Expression();
     while(Token_List[Token_List_Index]->get_tag()==LE || Token_List[Token_List_Index]->get_tag()==GE || Token_List[Token_List_Index]->get_tag()=='>' || Token_List[Token_List_Index]->get_tag()=='<')
     {
+        Push_Syn(Token_List[Token_List_Index]->get_tag());
         Token_List_Index++;
         Additive_Expression();
+        Quat();
     }
 }
 
@@ -449,8 +823,10 @@ void Additive_Expression()
     Multiplicative_Expression();
     while(Token_List[Token_List_Index]->get_tag()=='+' || Token_List[Token_List_Index]->get_tag()=='-')
     {
+        Push_Syn(Token_List[Token_List_Index]->get_tag());
         Token_List_Index++;
         Multiplicative_Expression();
+        Quat();
     }
 }
 
@@ -459,8 +835,10 @@ void Multiplicative_Expression()
     Unary_Expression();
     while(Token_List[Token_List_Index]->get_tag()=='*' || Token_List[Token_List_Index]->get_tag()=='/' || Token_List[Token_List_Index]->get_tag()=='%')
     {
+        Push_Syn(Token_List[Token_List_Index]->get_tag());
         Token_List_Index++;
         Unary_Expression();
+        Quat();
     }
 }
 
@@ -468,8 +846,9 @@ void Unary_Expression()
 {
     if(Token_List[Token_List_Index]->get_tag()=='-' || Token_List[Token_List_Index]->get_tag()=='~' || Token_List[Token_List_Index]->get_tag()=='!')
     {
-        Token_List_Index++;
-        Unary_Expression();
+        Push_Syn(Token_List[Token_List_Index]->get_tag());
+        Unary_Operator();
+        Unary_Quat();
     }
     else if(Token_List[Token_List_Index]->get_tag()=='(')
     {
@@ -485,13 +864,16 @@ void Unary_Expression()
         Primary_Expression();
     }
     else
+    {
         Constant();
+    }
 }
 
 void Primary_Expression()
 {
     if(Token_List[Token_List_Index]->get_tag()==ID)
     {
+        Push_Sem(Token_List_Index);
         Token_List_Index++;
         while(Token_List[Token_List_Index]->get_tag()=='[')
         {
@@ -514,6 +896,7 @@ int Integer_Constant()
 {
     if(Token_List[Token_List_Index]->get_tag()!=NUM)
         synax_error=true;
+    Push_Sem(Token_List_Index);
     Token_List_Index++;
     return Token_List[Token_List_Index-1]->get_numvalue();
 }
@@ -521,6 +904,7 @@ double Real_Constant()
 {
     if(Token_List[Token_List_Index]->get_tag()!=REAL)
         synax_error=true;
+    Push_Sem(Token_List_Index);
     Token_List_Index++;
     return Token_List[Token_List_Index-1]->get_realvalue();
 }
@@ -529,7 +913,8 @@ void Assignment_Expression()
 {
     Primary_Expression();
     Assignment_Operator();
-    Conditional_Expression();
+    Constant_Expression();
+    Assign();
 }
 
 
@@ -541,15 +926,18 @@ void Expression()
 {
     Assignment_Expression();
      while  (Token_List[Token_List_Index]->get_tag()==',')
-        {
-            Token_List_Index++;
-            Assignment_Expression();
-        }
+     {
+        Token_List_Index++;
+        Assignment_Expression();
+     }
 }
 void Assignment_Operator()
 {
      if (Token_List[Token_List_Index]->get_tag()=='=')
+     {
+        Push_Syn('=');
         Token_List_Index++;
+     }
      else
      {
         synax_error=true;
@@ -641,6 +1029,7 @@ void Declaration()
 }
 void Init_Declarator()
 {
+    bool is_assign=false;
     Declar_Unit du=Declarator();
     if(Const_Type_Op&&Token_List[Token_List_Index]->get_tag()!='=')
     {
@@ -654,15 +1043,21 @@ void Init_Declarator()
     if (Token_List[Token_List_Index]->get_tag()=='=')
     {
         Token_List_Index++;
-        if(Const_Type_Op)
-        {
-            val=Constant();
-        }
-        else
-            Initializer();
+        val=Constant();
+        is_assign=true;
+        //Initializer();
     }
     Synbl_Push(du,Type_Op,Const_Type_Op,Array_Op,val);   //typ:Type_Op   cat:Const_Type_Op   arr:Array_Op
     Array_Op=false;
+    if(is_assign)
+    {
+        Node tmp=Sem.top();
+        Sem.pop();
+        Push_Sem(du.tid);
+        Sem.push(tmp);
+        Push_Syn('=');
+        Assign();
+    }
 }
 void Initializer()
 {
@@ -705,14 +1100,35 @@ void Compound_Statement()
 {
     if (Token_List[Token_List_Index]->get_tag()=='{')
         Token_List_Index++;
+    else
+        synax_error=true;
     while(Token_List[Token_List_Index]->get_tag()==TYPE)
     {
         Declaration();
     }
     while(Token_List[Token_List_Index]->get_tag()!='}')
-    Statement();
-    if(Token_List[Token_List_Index]->get_tag()=='}')
+        Statement();
+    Token_List_Index++;
+}
+void Area_Statement()
+{
+    if (Token_List[Token_List_Index]->get_tag()=='{')
         Token_List_Index++;
+    else
+        synax_error=true;
+    while(Token_List[Token_List_Index]->get_tag()!='}')
+        Statement();
+    Token_List_Index++;
+}
+void Area_Jump_Statement()
+{
+        if (Token_List[Token_List_Index]->get_tag()=='{')
+        Token_List_Index++;
+    else
+        synax_error=true;
+    while(Token_List[Token_List_Index]->get_tag()!='}')
+        Jump_Statement();
+    Token_List_Index++;
 }
 void Statement()
 {
@@ -720,10 +1136,8 @@ void Statement()
         Iteration_Statement();
     else if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="if")
         Selection_Statement();
-    else if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="return")
-        Token_List_Index++;
     else  if(Token_List[Token_List_Index]->get_tag()=='{')
-        Compound_Statement();
+        Area_Statement();
     else
         Expression_Statement();
 }
@@ -745,21 +1159,50 @@ void Selection_Statement()
     else
        synax_error=true;
     Constant_Expression();
+    Genth();
     if (Token_List[Token_List_Index]->get_tag()==')')
         Token_List_Index++;
     else
        synax_error=true;
-    Statement();
+    Area_Statement();
     if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="else")
     {
+        Genel();
         Token_List_Index++;
-        Statement();
+        Area_Statement();
+        Genie();
+    }
+}
+void Selection_Jump_Statement()
+{
+    if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="if")
+        Token_List_Index++;
+    else
+       synax_error=true;
+    if (Token_List[Token_List_Index]->get_tag()=='(')
+        Token_List_Index++;
+    else
+       synax_error=true;
+    Constant_Expression();
+    Genth();
+    if (Token_List[Token_List_Index]->get_tag()==')')
+        Token_List_Index++;
+    else
+       synax_error=true;
+    Area_Jump_Statement();
+    if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="else")
+    {
+        Genel();
+        Token_List_Index++;
+        Area_Jump_Statement();
+        Genie();
     }
 }
 void Iteration_Statement()
 {
     if (Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="while")
     {
+        Genwh();
         Token_List_Index++;
         if (Token_List[Token_List_Index]->get_tag()=='(')
         {
@@ -770,10 +1213,12 @@ void Iteration_Statement()
             synax_error=true;
         }
         Constant_Expression();
+        Gendo();
         if (Token_List[Token_List_Index]->get_tag()!=')')
             synax_error=true;
         Token_List_Index++;
-        Statement();
+        Area_Jump_Statement();
+        Genwe();
     }
     else if (Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="for")
     {
@@ -788,39 +1233,52 @@ void Iteration_Statement()
             Token_List_Index++;
         else
             synax_error=true;
+        Genfr();
         if (Token_List[Token_List_Index]->get_tag()!=';')
             Constant_Expression();
         if (Token_List[Token_List_Index]->get_tag()==';')
             Token_List_Index++;
         else
             synax_error=true;
+        Genfc();
+        Gendo();
         if (Token_List[Token_List_Index]->get_tag()!=')')
             Expression();
         if (Token_List[Token_List_Index]->get_tag()==')')
             Token_List_Index++;
         else
            synax_error=true;
-        Statement();
+        Genfj();
+        Area_Jump_Statement();
+        Genfe();
     }
 }
 void Jump_Statement()
 {
     if (Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="continue")
-        {
+    {
             Token_List_Index++;
             if (Token_List[Token_List_Index]->get_tag()==';')
                 Token_List_Index++;
-            return;
-        }
+            else synax_error=true;
+            Continue();
+    }
     else if (Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="break")
-        {
+    {
             Token_List_Index++;
             if (Token_List[Token_List_Index]->get_tag()==';')
                 Token_List_Index++;
-            return;
-        }
+            else synax_error=true;
+            Break();
+    }
+    else if (Token_List[Token_List_Index]->get_tag()==KEY&&(Token_List[Token_List_Index]->get_lexeme_str()=="while"||Token_List[Token_List_Index]->get_lexeme_str()=="for"))
+        Iteration_Statement();
+    else if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="if")
+        Selection_Statement();
+    else  if(Token_List[Token_List_Index]->get_tag()=='{')
+        Area_Jump_Statement();
     else
-        Statement();
+        Expression_Statement();
 }
 
 int main()
@@ -1154,6 +1612,7 @@ int main()
         Token_List_Index=0;
         /* Init
         */
+        init();
         for(int i=0;i<=3;i++)
             Typel.push_back(Typeu(i));
         Compound_Statement();
@@ -1165,6 +1624,7 @@ int main()
         {
             cout<<"Synax analysis and Semantic analysis accepted!"<<endl;
             Show_Synbl();
+            Show_Middle_Code();
         }
     }
     return 0;

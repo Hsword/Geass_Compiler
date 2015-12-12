@@ -1,20 +1,21 @@
 {
-    const int a=10;
-    int aa[3],b=10;
-    const int c=1;
-    real x,y[2];
-    int z;
-    if(a&&1)
-      b=a+aa[1];
-    else
-       aa[1]=6;
-    for(b=2;b<=8;b=b+1)
-    ;
-    while(b<=18)
+    int b,z=1;
+    const int x=2;
+    int c=2;
+    if(b)
     {
-       aa[2]=aa[2]+1;
-       b=b+5;
+      b=b+z;
+    }
+    else
+    {
+    b=6;
+    }
+    for(b=1;b<=2;b=b+1)
+    {
+        while(c<=2)
+        {
+            b=b+x;
+            c=c*2;
+        }
     }
 }
-
-
