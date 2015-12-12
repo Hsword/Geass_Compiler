@@ -11,7 +11,7 @@ enum Tag
     NUM=256,REAL,ID,AND,OR,EQ,NE,GE,LE,STR,TYPE,KEY,THEN,ELSE,IFEND,WHILE,DO,WHEND,FOR,FOR_CHECK,FOR_DO,FOR_JUMP,FOR_END,CONTINUE,BREAK,
 };
 string Tag_Str[]={
-    "NUM","REAL","ID","AND","OR","EQ","NE","GE","LE","STR","TYPE","KEY","THEN","ELSE","IFEND","WHILE","DO","WHEND","FOR","FOR_CHECK","FOR_DO","FOR_JUMP","FOR_END","CONTINUE","BREAK"
+    "NUM","REAL","ID","AND","OR","EQ","NE","GE","LE","STR","TYPE","KEY","THEN","ELSE","IFEND","WHILE","DO","WHEND","FOR","FOR_C","FOR_D","FOR_J","FOR_E","CON","BRE"
 };
 #define NUM_SIZE 4
 #define REAL_SIZE 8
@@ -209,6 +209,7 @@ int Data_Size(int typ)
     else return 0;
 }
 vector<Synb> Synbl;
+int Tid_To_Sid(int tid);
 vector<double> Consl;
 int Vall=0;
 struct Typeu
@@ -323,12 +324,13 @@ void Semantic_Error(string msg)
 
 //四元式结构定义
 struct Node{
-    int Ein;   // 0: empty  1:identifier 2:num
+    int Ein;   // 0: empty  1:identifier 2:num 3:add
     int Addr;
     int Size;
     double Num;
 };
-Node Tid_To_Node();
+Node Tid_To_Node(int tid);
+Node Num_To_Node(int num);
 struct Middle_Code_Unit{
     int Operator;//
     Node Target1;//为零表示空
@@ -350,7 +352,65 @@ void Show_Middle_Code()
             cout<<Tag_Str[Middle_Code[i].Operator-256];
         }
         cout<<"\t";
-        //if(Middle_Code[i]->)
+        if(Middle_Code[i].Target1.Ein==0)
+        {
+            cout<<" ";
+        }
+        else if(Middle_Code[i].Target1.Ein==1)
+        {
+            cout<<"["<<Middle_Code[i].Target1.Addr<<"]";
+        }
+        else if(Middle_Code[i].Target1.Ein==2)
+        {
+            if(Middle_Code[i].Target1.Size<REAL_SIZE)
+                printf("%d",int(Middle_Code[i].Target1.Num));
+            else
+                printf("%.2f",Middle_Code[i].Target1.Num);
+        }
+        else
+        {
+            cout<<"[["<<Middle_Code[i].Target1.Addr<<"]]";
+        }
+        cout<<"\t";
+        if(Middle_Code[i].Target2.Ein==0)
+        {
+            cout<<" ";
+        }
+        else if(Middle_Code[i].Target2.Ein==1)
+        {
+            cout<<"["<<Middle_Code[i].Target2.Addr<<"]";
+        }
+        else if(Middle_Code[i].Target2.Ein==2)
+        {
+            if(Middle_Code[i].Target2.Size<REAL_SIZE)
+                printf("%d",int(Middle_Code[i].Target2.Num));
+            else
+                printf("%.2f",Middle_Code[i].Target2.Num);
+        }
+        else
+        {
+            cout<<"[["<<Middle_Code[i].Target2.Addr<<"]]";
+        }
+        cout<<"\t";
+        if(Middle_Code[i].Result.Ein==0)
+        {
+            cout<<" ";
+        }
+        else if(Middle_Code[i].Result.Ein==1)
+        {
+            cout<<"["<<Middle_Code[i].Result.Addr<<"]";
+        }
+        else if(Middle_Code[i].Result.Ein==2)
+        {
+            if(Middle_Code[i].Result.Size<REAL_SIZE)
+                printf("%d",int(Middle_Code[i].Result.Num));
+            else
+                printf("%.2f",Middle_Code[i].Result.Num);
+        }
+        else
+        {
+            cout<<"[["<<Middle_Code[i].Result.Addr<<"]]";
+        }
         cout<<endl;
     }
 }
@@ -365,6 +425,7 @@ void Pop_Syn();
 void Push_Sem(int tid);
 void Push_Syn(int op);
 void Quat();
+void Quat_a();//array address transfrom
 void Unary_Quat();
 void Assign();
 //if else
@@ -385,8 +446,25 @@ void Genfe();
 void Continue();
 void Break();
 
-
-
+int Tid_To_Sid(int tid)
+{
+    for(int i=0;i<Synbl.size();i++)
+    {
+        if(Token_List[tid]->get_lexeme_str()==Token_List[Synbl[i].tid]->get_lexeme_str())
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+Node Num_To_Node(int num)
+{
+    Node node;
+    node.Ein=2;
+    node.Size=NUM_SIZE;
+    node.Num=num;
+    return node;
+}
 Node Tid_To_Node(int tid)
 {
     Node node;
@@ -404,13 +482,17 @@ Node Tid_To_Node(int tid)
     }
     else if(Token_List[tid]->get_tag()==ID)
     {
+        bool is_found=false;
         for(int i=0;i<Synbl.size();i++)
         {
             if(Token_List[tid]->get_lexeme_str()==Token_List[Synbl[i].tid]->get_lexeme_str())
             {
-                if(Synbl[i].typ==4)
+                if(Synbl[i].typ>=4)
                 {
-                    ///数组！！！！
+                    ///数组
+                    node.Size=Data_Size(Typel[Synbl[i].typ].Tlen[0]);
+                    node.Ein=2;
+                    node.Num=Synbl[i].addr;
                 }
                 else
                 {
@@ -426,9 +508,11 @@ Node Tid_To_Node(int tid)
                         node.Addr=Synbl[i].addr;
                     }
                 }
-                break;
+                is_found=true;
             }
         }
+        if(!is_found)
+            Semantic_Error("Variable was not declared.");
     }
     return node;
 }
@@ -441,22 +525,22 @@ void init()
 }
 void Pop_Sem()
 {
-    cout<<"pop sem"<<endl;
+    //cout<<"pop sem"<<endl;
     Sem.pop();
 }
 void Pop_Syn()
 {
-    cout<<"pop syn"<<endl;
+    //cout<<"pop syn"<<endl;
     Syn.pop();
 }
 void Push_Sem(int tid)
 {
-    cout<<"push sem"<<endl;
+    //cout<<"push sem"<<endl;
     Sem.push(Tid_To_Node(tid));
 }
 void Push_Syn(int op)
 {
-    cout<<"push syn"<<endl;
+    //cout<<"push syn"<<endl;
     Syn.push(op);
 }
 void Quat()
@@ -469,12 +553,30 @@ void Quat()
     T.Target1=Sem.top();
     Pop_Sem();
     T.Result=Node();
+    T.Result.Ein=1;
     T.Result.Addr=Vall;
     T.Result.Size=max(T.Target1.Size,T.Target2.Size);
     Vall+=T.Result.Size;
-    T.Result.Ein=1;
     Sem.push(T.Result);
     Middle_Code.push_back(T);
+}
+void Quat_a()
+{
+    Middle_Code_Unit T;
+    T.Operator=Syn.top();
+    Pop_Syn();
+    T.Target2=Sem.top();
+    Pop_Sem();
+    T.Target1=Sem.top();
+    Pop_Sem();
+    T.Result=Node();
+    T.Result.Ein=1;
+    T.Result.Addr=Vall;
+    T.Result.Size=max(T.Target1.Size,T.Target2.Size);
+    Vall+=T.Result.Size;
+    Middle_Code.push_back(T);
+    T.Result.Ein=3;
+    Sem.push(T.Result);
 }
 void Unary_Quat()
 {
@@ -483,8 +585,12 @@ void Unary_Quat()
     Pop_Syn();
     T.Target1=Sem.top();
     Pop_Sem();
-    T.Result=Sem.top();
-    Pop_Sem();
+    T.Result=Node();
+    T.Result.Ein=1;
+    T.Result.Addr=Vall;
+    T.Result.Size=T.Target1.Size;
+    Vall+=T.Result.Size;
+    Sem.push(T.Result);
     T.Target2=Node();
     T.Target2.Ein=0;
     Middle_Code.push_back(T);
@@ -848,6 +954,7 @@ void Unary_Expression()
     {
         Push_Syn(Token_List[Token_List_Index]->get_tag());
         Unary_Operator();
+        Unary_Expression();
         Unary_Quat();
     }
     else if(Token_List[Token_List_Index]->get_tag()=='(')
@@ -875,13 +982,41 @@ void Primary_Expression()
     {
         Push_Sem(Token_List_Index);
         Token_List_Index++;
-        while(Token_List[Token_List_Index]->get_tag()=='[')
+        if(Token_List[Token_List_Index]->get_tag()=='[')
         {
-            Token_List_Index++;
-            Constant_Expression();
-            if(Token_List[Token_List_Index]->get_tag()==']')
+            int sid=Tid_To_Sid(Token_List_Index-1);
+            if(sid==-1)
+                    Semantic_Error("Variable was not declared.");
+             int tpid=Synbl[sid].typ;
+            bool first_level=true;
+            int k=2;
+            while(Token_List[Token_List_Index]->get_tag()=='[')
+            {
+                Push_Syn('+');
                 Token_List_Index++;
-            else synax_error=true;
+                Constant_Expression();
+                if(first_level)
+                    first_level=false;
+                else
+                    Quat();
+                if(Token_List[Token_List_Index]->get_tag()==']')
+                {
+                    Token_List_Index++;
+                    if(k<Typel[tpid].Tlen.size())
+                    {
+                        Push_Syn('*');
+                        Sem.push(Num_To_Node(Typel[tpid].Tlen[k]));
+                        k++;
+                    }
+                    if(k!=Typel[tpid].Tlen.size())
+                        Quat();
+                    else
+                        Quat_a();
+                }
+                else synax_error=true;
+            }
+            if(k!=Typel[tpid].Tlen.size())
+                Semantic_Error("Array's dimension mismatch!");
         }
     }
 }
@@ -1049,7 +1184,7 @@ void Init_Declarator()
     }
     Synbl_Push(du,Type_Op,Const_Type_Op,Array_Op,val);   //typ:Type_Op   cat:Const_Type_Op   arr:Array_Op
     Array_Op=false;
-    if(is_assign)
+    if(is_assign&&!Const_Type_Op)
     {
         Node tmp=Sem.top();
         Sem.pop();
