@@ -785,6 +785,7 @@ void Logical_Or_Expression();
 void Expression();
 void Logical_And_Expression();
 void Inclusive_Or_Expression();
+void Exclusive_Or_Expression();
 void And_Expression();
 void Equality_Expression();
 void Relational_Expression();
@@ -878,6 +879,18 @@ void Logical_And_Expression()
 
 void Inclusive_Or_Expression()
 {
+    Exclusive_Or_Expression();
+    while(Token_List[Token_List_Index]->get_tag()=='|')
+    {
+        Push_Syn('|');
+        Token_List_Index++;
+        Exclusive_Or_Expression();
+        Quat();
+    }
+}
+
+void Exclusive_Or_Expression()
+{
     And_Expression();
     while(Token_List[Token_List_Index]->get_tag()=='^')
     {
@@ -960,7 +973,7 @@ void Unary_Expression()
     else if(Token_List[Token_List_Index]->get_tag()=='(')
     {
         Token_List_Index++;
-        Expression();
+        Constant_Expression();
         if(Token_List[Token_List_Index]->get_tag()==')')
             Token_List_Index++;
         else
@@ -1082,9 +1095,9 @@ void Unary_Operator()
 {
      if (Token_List[Token_List_Index]->get_tag()=='-')
         Token_List_Index++;
-    if (Token_List[Token_List_Index]->get_tag()=='~')
+    else if (Token_List[Token_List_Index]->get_tag()=='~')
         Token_List_Index++;
-    if (Token_List[Token_List_Index]->get_tag()=='!')
+    else if (Token_List[Token_List_Index]->get_tag()=='!')
         Token_List_Index++;
     else
     {
@@ -1182,6 +1195,7 @@ void Init_Declarator()
         is_assign=true;
         //Initializer();
     }
+    Synbl_Push_Name(du.tid);
     Synbl_Push(du,Type_Op,Const_Type_Op,Array_Op,val);   //typ:Type_Op   cat:Const_Type_Op   arr:Array_Op
     Array_Op=false;
     if(is_assign&&!Const_Type_Op)
@@ -1376,7 +1390,7 @@ void Iteration_Statement()
         else
             synax_error=true;
         Genfc();
-        Gendo();
+        Genfd();
         if (Token_List[Token_List_Index]->get_tag()!=')')
             Expression();
         if (Token_List[Token_List_Index]->get_tag()==')')
@@ -1489,7 +1503,7 @@ int main()
                 else
                 {
                     Token_List.push_back(new Word(ID,get_idindex(tmp)));
-                    Synbl_Push_Name(Token_List.size()-1);
+                    //Synbl_Push_Name(Token_List.size()-1);
                 }
             }
             lexemeBegin=forword;

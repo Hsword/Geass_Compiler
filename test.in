@@ -2,6 +2,8 @@
     int a,b[20],c,d=1;
     const int y=2;
     int i;
+    i=(1+2)*3;
+    i=2|3;
     c=d*3+d/2;
     for(i=1;i<=20;i=i+1)
     {
