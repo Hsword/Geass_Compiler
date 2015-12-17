@@ -6,20 +6,21 @@
 #include <cstdlib>
 #include <stack>
 using namespace std;
+//lexical analysis
 enum Tag
 {
-    NUM=256,REAL,ID,AND,OR,EQ,NE,GE,LE,STR,TYPE,KEY,THEN,ELSE,IFEND,WHILE,DO,WHEND,FOR,FOR_CHECK,FOR_DO,FOR_JUMP,FOR_END,CONTINUE,BREAK,
+    NUM=256,REAL,ID,AND,OR,EQ,NE,GE,LE,STR,TYPE,KEY,THEN,ELSE,IFEND,WHILE,DO,WHEND,FOR,FOR_CHECK,FOR_DO,FOR_JUMP,FOR_END,CONTINUE,BREAK,RET,SSP,SPP,CALL,RETAX,RETT,FUN_S,FUN_E
 };
 string Tag_Str[]={
-    "NUM","REAL","ID","AND","OR","EQ","NE","GE","LE","STR","TYPE","KEY","THEN","ELSE","IFEND","WHILE","DO","WHEND","FOR","FOR_C","FOR_D","FOR_J","FOR_E","CON","BRE"
+    "NUM","REAL","ID","AND","OR","EQ","NE","GE","LE","STR","TYPE","KEY","THEN","ELSE","IFEND","WHILE","DO","WHEND","FOR","FOR_C","FOR_D","FOR_J","FOR_E","CON","BRE","RET","SSP","SPP","CALL","RETAX","RETT","FUN_S","FUN_E"
 };
 #define NUM_SIZE 4
 #define REAL_SIZE 8
 #define CHAR_SIZE 1
 const int k_w_len=8;
-const int t_w_len=5;
+const int t_w_len=4;
 string keywords[k_w_len]={"if","else","for","while","do","break","continue","return"};
-string typewords[t_w_len]={"int","real","char","bool","const"};
+string typewords[t_w_len]={"int","real","char","const"};
 vector<string> idwords;
 vector<string> strwords;
 int get_keyindex(string a)
@@ -180,7 +181,8 @@ bool synax_error=false;
 bool semantic_error=false;
 void Semantic_Error(string msg);
 
-//const 声明变量必须跟立即数
+//符号表设计
+int curpid;
 struct Synb
 {
     int tid;//token_index
@@ -191,13 +193,15 @@ struct Synb
     */
     int cat;
     /*
-    c v
-    1 2
+    c v f
+    1 2 3
     */
     int addr;
+    int pid;
     Synb(int tid)
     {
         this->tid=tid;
+        this->pid=curpid;
         this->typ=this->cat=this->addr=0;
     }
 };
@@ -241,11 +245,29 @@ struct Declar_Unit
         this->Array_Len_List.push_back(len);
     }
 };
+
+//四元式结构定义
+struct Node{
+    int Ein;   // 0: empty  1:identifier 2:num 3:arr 4.ret 5.fun
+    int Addr;
+    int Size;
+    double Num;
+    string Name;
+};
+// function list
+struct Pfinf
+{
+    int Size;
+    Node Ret;
+};
+vector<Pfinf> Pfinfl;
+int mainpid;
+
 void Synbl_Push_Name(int tid)
 {
     for(int i=0;i<Synbl.size();i++)
     {
-        if(Token_List[Synbl[i].tid]->get_lexeme_str()==Token_List[tid]->get_lexeme_str())
+        if(Token_List[Synbl[i].tid]->get_lexeme_str()==Token_List[tid]->get_lexeme_str()&&Synbl[i].pid==curpid)
             return;
     }
     Synbl.push_back(Synb(tid));
@@ -256,14 +278,15 @@ void Synbl_Push(Declar_Unit du,int typ,bool cat,bool arr,double val)   //typ:Typ
     int tid=du.tid;
     for(int i=0;i<Synbl.size();i++)
     {
-        if(Token_List[Synbl[i].tid]->get_lexeme_str()==Token_List[tid]->get_lexeme_str())
+        if((Token_List[Synbl[i].tid]->get_lexeme_str()==Token_List[tid]->get_lexeme_str())&&Synbl[i].pid==curpid)
         {
             if(Synbl[i].typ!=0)
             {
-                Semantic_Error("redeclation confict!");
+                Semantic_Error("Variable redeclation confict!");
             }
             else
             {
+                Synbl[i].pid=curpid;
                 if(arr)
                 {
                     Synbl[i].cat=2;
@@ -296,13 +319,50 @@ void Synbl_Push(Declar_Unit du,int typ,bool cat,bool arr,double val)   //typ:Typ
                     }
                 }
             }
+            return ;
+        }
+    }
+}
+int Synbl_Push_Fun_Typ(int tid,int typ)
+{
+    for(int i=0;i<Synbl.size();i++)
+    {
+        if(Token_List[Synbl[i].tid]->get_lexeme_str()==Token_List[tid]->get_lexeme_str())
+        {
+            if(Synbl[i].cat!=0)
+            {
+                Semantic_Error("Function redeclation confict!");
+            }
+            else
+            {
+                Synbl[i].cat=3;
+                Synbl[i].tid=tid;
+                Synbl[i].typ=typ;
+                Synbl[i].pid=-1;
+                Synbl[i].addr=Pfinfl.size();
+                Pfinfl.push_back(Pfinf());
+                return Synbl[i].addr;
+            }
+
+        }
+    }
+}
+void Synbl_Push_Fun_Size(int tid,int Size)
+{
+    for(int i=0;i<Synbl.size();i++)
+    {
+        if(Token_List[Synbl[i].tid]->get_lexeme_str()==Token_List[tid]->get_lexeme_str())
+        {
+                Pfinfl[Synbl[i].addr].Size=Size;
+                return ;
         }
     }
 }
 bool Const_Type_Op=false;
 int Type_Op;
+int Fun_Type_Op;
 bool Array_Op=false;
-
+bool Ret_Op=false;
 void Show_Synbl()
 {
     cout<<"Synbl:"<<endl;
@@ -310,7 +370,7 @@ void Show_Synbl()
     for(int i=0;i<Synbl.size();i++)
     {
         cout<<Token_List[Synbl[i].tid]->get_lexeme_str();
-        cout<<"\t"<<Synbl[i].typ<<"\t"<<Synbl[i].cat<<"\t"<<Synbl[i].addr<<"\n";
+        cout<<"\t"<<Synbl[i].typ<<"\t"<<Synbl[i].cat<<"\t"<<Synbl[i].addr<<"\t"<<Synbl[i].pid<<endl;
     }
 }
 
@@ -322,13 +382,10 @@ void Semantic_Error(string msg)
     exit(0);
 }
 
-//四元式结构定义
-struct Node{
-    int Ein;   // 0: empty  1:identifier 2:num 3:add
-    int Addr;
-    int Size;
-    double Num;
-};
+
+
+stack<Node> Sem;
+stack<int> Syn;
 Node Tid_To_Node(int tid);
 Node Num_To_Node(int num);
 struct Middle_Code_Unit{
@@ -337,6 +394,87 @@ struct Middle_Code_Unit{
     Node Target2;//为零表示为空
     Node Result;//为零表示为空，为-1表示此处为跳转地址
 };
+Middle_Code_Unit Get_Ssp(int pid)
+{
+    Middle_Code_Unit tmp;         //PUSH SP   ADD SP, VALL
+    tmp.Operator=SSP;
+    tmp.Target1.Ein=2;
+    tmp.Target1.Addr=pid;
+    tmp.Target1.Size=NUM_SIZE;
+    tmp.Target2.Ein=0;
+    tmp.Result.Ein=0;
+    return tmp;
+}
+Middle_Code_Unit Get_Spp()
+{
+    Middle_Code_Unit tmp;
+    tmp.Operator=SPP;        //POP SP
+    tmp.Target1.Ein=0;
+    tmp.Target2.Ein=0;
+    tmp.Result.Ein=0;
+    return tmp;
+}
+Middle_Code_Unit Call(int tid)
+{
+    Middle_Code_Unit tmp;
+    tmp.Operator=CALL;
+    tmp.Target1.Ein=5;
+    tmp.Target1.Name=Token_List[tid]->get_lexeme_str();
+    tmp.Target2.Ein=0;
+    tmp.Result.Ein=0;
+    return tmp;
+}
+Middle_Code_Unit Fun_Start(int tid)
+{
+    Middle_Code_Unit tmp;
+    tmp.Operator=FUN_S;
+    tmp.Target1.Ein=5;
+    tmp.Target1.Name=Token_List[tid]->get_lexeme_str();
+    tmp.Target2.Ein=0;
+    tmp.Result.Ein=0;
+    return tmp;
+}
+Middle_Code_Unit Fun_End(int tid)
+{
+    Middle_Code_Unit tmp;
+    tmp.Operator=FUN_E;
+    tmp.Target1.Ein=5;
+    tmp.Target1.Name=Token_List[tid]->get_lexeme_str();
+    tmp.Target2.Ein=0;
+    tmp.Result.Ein=0;
+    return tmp;
+}
+Middle_Code_Unit Get_Retax(Node node)
+{
+    Middle_Code_Unit tmp;
+    tmp.Operator=RETAX;     //MOV AX,[]
+    tmp.Target1=node;
+    tmp.Target2.Ein=0;
+    tmp.Result.Ein=0;
+    return tmp;
+}
+Middle_Code_Unit Get_Ret()
+{
+    Middle_Code_Unit tmp;
+    tmp.Operator=RET;           //RET
+    tmp.Target1.Ein=0;
+    tmp.Target2.Ein=0;
+    tmp.Result.Ein=0;
+    return tmp;
+}
+Middle_Code_Unit Get_Rett(int typ)
+{
+    Middle_Code_Unit tmp;
+    tmp.Operator=RETT;        //MOV [],AX
+    tmp.Target1.Ein=1;
+    tmp.Target1.Size=Data_Size(typ);
+    tmp.Target1.Addr=Vall;
+    Vall+=tmp.Target1.Size;
+    Sem.push(tmp.Target1);
+    tmp.Target2.Ein=0;
+    tmp.Result.Ein=0;
+    return tmp;
+}
 vector<Middle_Code_Unit> Middle_Code;
 void Show_Middle_Code()
 {
@@ -367,9 +505,13 @@ void Show_Middle_Code()
             else
                 printf("%.2f",Middle_Code[i].Target1.Num);
         }
-        else
+        else if(Middle_Code[i].Target1.Ein==2)
         {
             cout<<"[["<<Middle_Code[i].Target1.Addr<<"]]";
+        }
+        else
+        {
+            cout<<Middle_Code[i].Target1.Name;
         }
         cout<<"\t";
         if(Middle_Code[i].Target2.Ein==0)
@@ -416,8 +558,7 @@ void Show_Middle_Code()
 }
 vector< vector< Middle_Code_Unit> > Block;
 //翻译文法
-stack<Node> Sem;
-stack<int> Syn;
+
 //动作函数声明
 void init();
 void Pop_Sem();
@@ -612,6 +753,10 @@ void Assign()
         //cout<<T.Result.Size<<T.Target1.Size<<endl;
         Semantic_Error("Type mismatch in assign expression!");
     }
+    if(T.Result.Ein==0||T.Result.Ein==2)
+    {
+        Semantic_Error("Left value error!");
+    }
     Middle_Code.push_back(T);
 }
 //if else
@@ -803,7 +948,7 @@ int TokenList_Index;
 void Assignment_Operator();
 void Unary_Operator();
 void Type_Name();
-void Type_Specifier();
+int Type_Specifier();
 Declar_Unit Declarator();
 void Declaration();
 void Init_Declarator();
@@ -816,8 +961,10 @@ void Expression_Statement();
 void Selection_Statement();
 void Iteration_Statement();
 void Jump_Statement();
-
-
+//
+void Return_Statement();
+void Oringinal_Statements();
+int Function_Call_Expression();
 
 int Identifier()
  {
@@ -981,7 +1128,19 @@ void Unary_Expression()
     }
     else if(Token_List[Token_List_Index]->get_tag()==ID)
     {
-        Primary_Expression();
+        if(Token_List_Index+1==Token_List.size())
+        {
+            synax_error=true;
+        }
+        else if(Token_List[Token_List_Index+1]->get_tag()=='(')
+        {
+            int typ=Function_Call_Expression();
+            Middle_Code.push_back(Get_Rett(typ));
+        }
+        else
+        {
+            Primary_Expression();
+        }
     }
     else
     {
@@ -1024,7 +1183,12 @@ void Primary_Expression()
                     if(k!=Typel[tpid].Tlen.size())
                         Quat();
                     else
+                    {
+                        Push_Syn('*');
+                        Sem.push(Num_To_Node(4));
+                        Quat();
                         Quat_a();
+                    }
                 }
                 else synax_error=true;
             }
@@ -1117,7 +1281,7 @@ void Type_Name()
         Type_Specifier();
      }
 }
-void Type_Specifier()
+int Type_Specifier()
 {
     if (Token_List[Token_List_Index]->get_lexeme_str()=="int")
     {
@@ -1138,6 +1302,7 @@ void Type_Specifier()
     {
             synax_error=true;
     }
+    return Type_Op;
 }
 Declar_Unit Declarator()
 {
@@ -1281,7 +1446,9 @@ void Area_Jump_Statement()
 }
 void Statement()
 {
-    if (Token_List[Token_List_Index]->get_tag()==KEY&&(Token_List[Token_List_Index]->get_lexeme_str()=="while"||Token_List[Token_List_Index]->get_lexeme_str()=="for"))
+    if (Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="return")
+        Return_Statement();
+    else if (Token_List[Token_List_Index]->get_tag()==KEY&&(Token_List[Token_List_Index]->get_lexeme_str()=="while"||Token_List[Token_List_Index]->get_lexeme_str()=="for"))
         Iteration_Statement();
     else if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="if")
         Selection_Statement();
@@ -1422,6 +1589,8 @@ void Jump_Statement()
     }
     else if (Token_List[Token_List_Index]->get_tag()==KEY&&(Token_List[Token_List_Index]->get_lexeme_str()=="while"||Token_List[Token_List_Index]->get_lexeme_str()=="for"))
         Iteration_Statement();
+    else if (Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="return")
+        Return_Statement();
     else if(Token_List[Token_List_Index]->get_tag()==KEY&&Token_List[Token_List_Index]->get_lexeme_str()=="if")
         Selection_Statement();
     else  if(Token_List[Token_List_Index]->get_tag()=='{')
@@ -1430,6 +1599,90 @@ void Jump_Statement()
         Expression_Statement();
 }
 
+void Oringinal_Statements()
+{
+    mainpid=-1;
+    curpid=-1;
+    while(Token_List_Index<Token_List.size()&&Token_List[Token_List_Index]->get_tag()==TYPE)
+    {
+        Vall=0;
+        Fun_Type_Op=Type_Specifier();
+        int tid=Identifier();
+        Middle_Code.push_back(Fun_Start(tid));
+        Synbl_Push_Name(tid);
+        curpid=Synbl_Push_Fun_Typ(tid,Type_Op);
+        if(Token_List[tid]->get_lexeme_str()=="main")
+            mainpid=curpid;
+        if(Token_List[Token_List_Index]->get_tag()!='(')
+            synax_error=true;
+        else
+            Token_List_Index++;
+        if(Token_List_Index==Token_List.size())
+            synax_error=true;
+        //params
+        if(Token_List[Token_List_Index]->get_tag()!=')')
+            synax_error=true;
+        else
+            Token_List_Index++;
+        if(Token_List_Index==Token_List.size())
+            synax_error=true;
+        Compound_Statement();
+        Middle_Code.push_back(Fun_End(tid));
+        Synbl_Push_Fun_Size(tid,Vall);
+    }
+    if(Token_List_Index<Token_List.size())
+        synax_error=true;
+    if(mainpid==-1)
+        Semantic_Error("No main function!");
+    for(int i=0;i<Middle_Code.size();i++)
+    {
+        if(Middle_Code[i].Operator==SSP)
+        {
+            Middle_Code[i].Target1.Num=Pfinfl[Middle_Code[i].Target1.Addr].Size;
+        }
+    }
+}
+int Function_Call_Expression()
+{
+    //SSP SIZE
+    int tid=Identifier();
+    int sid=Tid_To_Sid(tid);
+    if(sid==-1)
+        Semantic_Error("Undeclared function!");
+    Middle_Code.push_back(Get_Ssp(curpid));
+    if(Token_List[Token_List_Index]->get_tag()!='(')
+        synax_error=true;
+    else
+        Token_List_Index++;
+    if(Token_List_Index==Token_List.size())
+        synax_error=true;
+    //params
+    if(Token_List[Token_List_Index]->get_tag()!=')')
+        synax_error=true;
+    else
+        Token_List_Index++;
+    if(Token_List_Index==Token_List.size())
+        synax_error=true;
+    //CALL
+    Middle_Code.push_back(Call(tid));
+    //SPP
+    Middle_Code.push_back(Get_Spp());
+    return Synbl[sid].typ;
+}
+void Return_Statement()
+{
+    Token_List_Index++;
+    Constant_Expression();
+    Node tmp=Sem.top();
+    Sem.pop();
+    if(tmp.Size>Data_Size(Fun_Type_Op))
+        Semantic_Error("Function return type mismatch!");
+    Middle_Code.push_back(Get_Retax(tmp));
+    Middle_Code.push_back(Get_Ret());
+    if(Token_List[Token_List_Index]->get_tag()!=';')
+        synax_error=true;
+    Token_List_Index++;
+}
 int main()
 {
     freopen("test.in","r",stdin);
@@ -1764,7 +2017,8 @@ int main()
         init();
         for(int i=0;i<=3;i++)
             Typel.push_back(Typeu(i));
-        Compound_Statement();
+        //Compound_Statement();
+        Oringinal_Statements();
         if(synax_error)
         {
             cout<<error_message<<endl;
