@@ -366,7 +366,7 @@ bool Ret_Op=false;
 void Show_Synbl()
 {
     cout<<"Synbl:"<<endl;
-    cout<<"name\ttyp\tcat\taddr\n";
+    cout<<"name\ttyp\tcat\taddr\tpid\n";
     for(int i=0;i<Synbl.size();i++)
     {
         cout<<Token_List[Synbl[i].tid]->get_lexeme_str();
@@ -1686,6 +1686,7 @@ void Return_Statement()
 int main()
 {
     freopen("test.in","r",stdin);
+    freopen("test.out","w",stdout);
 
     while(getline(cin,tmp))
     {

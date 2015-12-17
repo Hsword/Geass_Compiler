@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1450319496 source:/home/hsword/Compiler/Geass_Compiler/main.cpp
+1450320524 source:/home/hsword/Compiler/Geass_Compiler/main.cpp
 	<iostream>
 	<string>
 	<cstdio>
